@@ -1,9 +1,16 @@
+import sys
+sys.path.append("../board_simulator")
+sys.path.append("../engines")
+
 import requests
 import json
 import select
+from Board import Board
 
 # bot API token
-BOT_API_TOKEN = "lip_Y1QXe5YG2bmbnjThxrvv"
+with open('../../secrets/api_token.txt', 'r') as file:
+    BOT_API_TOKEN = file.readline().strip()
+
 BOT_NAME = "carlus_magnusen_9000"
 
 # Define the Lichess API endpoint URLs
@@ -15,7 +22,6 @@ events_url = f"{api_url}/stream/event"
 headers = {
     "Authorization": f"Bearer {BOT_API_TOKEN}"
 }
-
 
 def accept_challenge(challenge_id):
     """
@@ -30,6 +36,8 @@ def accept_challenge(challenge_id):
     }
     response = requests.post(accept_url, headers=headers, data=data)
     response.raise_for_status()
+    
+    
 
 def play_move(game_id, move):
     """
@@ -53,10 +61,31 @@ def move2string(coord1, coord2):
     Args:
         coord1 (list): coordinate of source
         coord2 (list): coordinate of destination
+
+    Returns:
+        move string that gets sent to the API
     """
     letter_map = {0 : 'a', 1 : 'b', 2 : 'c', 3 : 'd', 4 : 'e', 5 : 'f', 6 : 'g', 7 : 'h'}
 
     return letter_map[coord1[0]] + str(coord1[1]) + letter_map[coord2[0]] + str(coord2[1])
+
+def string2move(string):
+    """
+    Converts from string from the API to a coordinate move
+
+    Args:
+        string (str): string of move from the API
+    
+    Returns:
+        coord1 (list): coordinate of source
+        coord2 (list): coordinate of destination
+    """
+    char_map = {'a': 0, 'b' : 1, 'c' : 2, 'd' : 3, 'e' : 4, 'f' : 5, 'g' : 6, 'h' : 7}
+
+    coord1 = [char_map[string[0]], int(string[1])]
+    coord2 = [char_map[string[2]], int(string[3])]
+
+    return [coord1, coord2]
 
 def main():
     """
@@ -100,6 +129,8 @@ def main():
             is_white = event['white']['id'] == BOT_NAME
             is_my_turn = is_white
 
+        board = Board()
+
         while True:
             ready = None
             # Wait for the response to be ready for reading
@@ -119,9 +150,11 @@ def main():
                     move = ""
                     if event['moves'] != "":
                         move = (event['moves'].split())[-1]
-                    print("MOVE -- ", move)
+                    print(f"MOVE {'BOT   ' if is_my_turn else 'PLAYER'} -- ", move)
                     is_my_turn = not is_my_turn
-                    # play_move(challenge_id, "g8h6")
+
+
+                    
                     
             else:
                 # The response has no data available, so wait for more events
