@@ -6,6 +6,7 @@ import requests
 import json
 import select
 from Board import Board
+import engine_v0 as engine
 
 # bot API token
 with open('../../secrets/api_token.txt', 'r') as file:
@@ -30,13 +31,28 @@ def accept_challenge(challenge_id):
     Args:
         challenge_id (string): ID of the challenge to accept
     """
+
     accept_url = f"{api_url}/challenge/{challenge_id}/accept"
+
     data = {
         "seconds": 0 # 0 seconds means unlimited time
     }
     response = requests.post(accept_url, headers=headers, data=data)
     response.raise_for_status()
     
+def reject_rematch(challenge_ID):
+    """
+    This function rejects a rematch request
+
+    Args:
+        rematch_ID (string): ID of the rematch to reject
+    """
+
+    decline_url = f"{api_url}/challenge/{challenge_ID}/decline"
+
+
+    response = requests.post(decline_url, headers=headers)
+    response.raise_for_status()
     
 
 def play_move(game_id, move):
@@ -67,7 +83,7 @@ def move2string(coord1, coord2):
     """
     letter_map = {0 : 'a', 1 : 'b', 2 : 'c', 3 : 'd', 4 : 'e', 5 : 'f', 6 : 'g', 7 : 'h'}
 
-    return letter_map[coord1[0]] + str(coord1[1]) + letter_map[coord2[0]] + str(coord2[1])
+    return letter_map[coord1[1]] + str(coord1[0] + 1) + letter_map[coord2[1]] + str(coord2[0] + 1)
 
 def string2move(string):
     """
@@ -80,12 +96,17 @@ def string2move(string):
         coord1 (list): coordinate of source
         coord2 (list): coordinate of destination
     """
+    promotion = None
     char_map = {'a': 0, 'b' : 1, 'c' : 2, 'd' : 3, 'e' : 4, 'f' : 5, 'g' : 6, 'h' : 7}
 
-    coord1 = [char_map[string[0]], int(string[1])]
-    coord2 = [char_map[string[2]], int(string[3])]
+    coord1 = [int(string[1]) - 1, char_map[string[0]]]
+    coord2 = [int(string[3]) - 1, char_map[string[2]]]
 
-    return [coord1, coord2]
+    if len(string) == 5:
+        prom_map = {'n' : 'KN', 'b' : 'BI', 'r' : 'RO', 'q' : 'QU'}
+        promotion = prom_map[string[4]]
+
+    return [coord1, coord2], promotion
 
 def main():
     """
@@ -107,9 +128,13 @@ def main():
                     # Check if the event is a challenge and accept it if so. Break the loop so other challenges get queued while this game is played
                     if event['type'] == "challenge":
                         challenge_id = event['challenge']['id']
-                        accept_challenge(challenge_id)
-                        response.close()
-                        break
+
+                        if 'rematchOf' not in event['challenge'].keys():
+                            accept_challenge(challenge_id)
+                            response.close()
+                            break
+                        else:
+                            reject_rematch(challenge_id)
             else:
                 # The response has no data available, so wait for more events
                 pass
@@ -131,12 +156,24 @@ def main():
 
         board = Board()
 
+        print(f"STARTED GAME \n is_white: {is_white}")
+
+        board.print_board()
+
+        # Play first move if white
+        if(is_my_turn):
+            bot_move = engine.get_move(board, board.WHITE if is_white else board.BLACK)
+            play_move(challenge_id, move2string(bot_move[0], bot_move[1])) 
+
+        print("=========")
+
         while True:
             ready = None
             # Wait for the response to be ready for reading
             if not response.raw.closed:
                 ready = select.select([response.raw], [], [], None)
             else:
+                del board
                 print("Game Over.")
                 break
 
@@ -147,12 +184,28 @@ def main():
                 print("IN GAME -- ", line)
                 if line.strip():
                     event = json.loads(line)
-                    move = ""
+                    if event['status'] != "started":
+                        del board
+                        print(f"Game Over -- {event['status']}")
+                        break
+                    move_str = ""
                     if event['moves'] != "":
-                        move = (event['moves'].split())[-1]
-                    print(f"MOVE {'BOT   ' if is_my_turn else 'PLAYER'} -- ", move)
+                        move_str = (event['moves'].split())[-1]
+                    print(f"MOVE {'BOT   ' if is_my_turn else 'PLAYER'} -- ", move_str)
+
+                    move, promotion = string2move(move_str)
+
+                    board.make_move(move[0], move[1], promotion)
+
+                    board.print_board()
+
+                    print("")
+
                     is_my_turn = not is_my_turn
 
+                    if(is_my_turn):
+                        bot_move = engine.get_move(board, board.WHITE if is_white else board.BLACK)
+                        play_move(challenge_id, move2string(bot_move[0], bot_move[1]))                    
 
                     
                     

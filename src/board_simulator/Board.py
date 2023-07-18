@@ -11,23 +11,27 @@ class Board:
         def __init__(self, message):
             super().__init__(message)
 
-    def __init__(self, 
-                 board_state={'W_KN': Board_constants.DEF_W_KN, 
-                 'W_BI': Board_constants.DEF_W_BI, 
-                 'W_RO': Board_constants.DEF_W_RO, 
-                 'W_PA': Board_constants.DEF_W_PA, 
-                 'W_QU': Board_constants.DEF_W_QU, 
-                 'W_KI': Board_constants.DEF_W_KI, 
-                 'W_EN' : Board_constants.DEF_ENP,
-                 'B_KN': Board_constants.DEF_B_KN, 
-                 'B_BI': Board_constants.DEF_B_BI, 
-                 'B_RO': Board_constants.DEF_B_RO, 
-                 'B_PA': Board_constants.DEF_B_PA, 
-                 'B_QU': Board_constants.DEF_B_QU, 
-                 'B_KI': Board_constants.DEF_B_KI,
-                 'B_EN' : Board_constants.DEF_ENP}):
-        self.board_state = board_state
-        
+    def __init__(self, board_state=None):
+        self.bc = Board_constants()
+        if(board_state == None):
+            self.board_state = {'W_KN': self.bc.DEF_W_KN, 
+                                'W_BI': self.bc.DEF_W_BI, 
+                                'W_RO': self.bc.DEF_W_RO, 
+                                'W_PA': self.bc.DEF_W_PA, 
+                                'W_QU': self.bc.DEF_W_QU, 
+                                'W_KI': self.bc.DEF_W_KI, 
+                                'W_EN': self.bc.DEF_ENP,
+                                'W_CA': [True, True],
+                                'B_KN': self.bc.DEF_B_KN, 
+                                'B_BI': self.bc.DEF_B_BI, 
+                                'B_RO': self.bc.DEF_B_RO, 
+                                'B_PA': self.bc.DEF_B_PA, 
+                                'B_QU': self.bc.DEF_B_QU, 
+                                'B_KI': self.bc.DEF_B_KI,
+                                'B_EN': self.bc.DEF_ENP,
+                                'B_CA': [True, True]}
+        else:
+            self.board_state = board_state
 
     def _coord2bitmapID(self, coord):
         """
@@ -104,6 +108,8 @@ class Board:
         piece_mask = (1 << bitmap_id) & Board.MASK64
 
         for key in self.board_state:
+            if key == 'W_CA' or key == 'B_CA':
+                continue
             if self.board_state[key] & piece_mask:
                 return key
         
@@ -116,7 +122,7 @@ class Board:
         Args:
             coord1 (int array): coordinates of source
             coord2 (int array): coordinates of destination
-            promotion (string): The type of piece a pawn promotes to (None if no promotion)
+            promotion (string): The type of piece a pawn promotes to (None if no promotion). Dont add the side modifiers, just the piece. The side modifier will be added automatically. For example use 'QU' instead of 'W_QU'
         """
 
         moved_piece = self.get_piece_at(coord1)
@@ -125,17 +131,35 @@ class Board:
             raise self.Board_Exception("No piece at first coordinate")
         
         #Castling
-        if((moved_piece == 'W_KI' or moved_piece == 'B_KI') \
-           and (destination_piece == 'W_RO' or destination_piece == 'B_RO')):
-            if(coord2[1] == 0):
+        if(moved_piece == 'W_KI' or moved_piece == 'B_KI') \
+            and (abs(coord1[1] - coord2[1]) > 1):
+            if moved_piece == 'W_KI':
+                self.board_state['W_CA'] = [False, False]
+            else:
+                self.board_state['B_CA'] = [False, False]
+            
+            if(coord2[1] == 2):
                 self.make_move([coord1[0], 0], [coord1[0], 3])
-                destination_piece = None
-                coord2 = [coord1[0], 2]
-            if(coord2[1] == 7):
+            if(coord2[1] == 6):
                 self.make_move([coord1[0], 7], [coord1[0], 5])
-                destination_piece = None
-                coord2 = [coord1[0], 6]
 
+        #Update castle states
+        if(moved_piece == 'W_RO'):
+            if(coord1 == [0, 0]):
+                self.board_state['W_CA'][0] = False
+            if(coord1 == [0, 7]):
+                self.board_state['W_CA'][1] = False
+            
+        if(moved_piece == 'B_RO'):
+            if(coord1 == [7, 0]):
+                self.board_state['B_CA'][0] = False
+            if(coord1 == [7, 7]):
+                self.board_state['B_CA'][1] = False
+
+        if (moved_piece == 'W_KI'):
+            self.board_state['W_CA'] = [False, False]
+        if (moved_piece == 'B_KI'):
+            self.board_state['B_CA'] = [False, False]
                 
 
         # en passants
@@ -159,37 +183,28 @@ class Board:
 
         # pawn promotion
         if (moved_piece == 'W_PA' and coord2[0] == 7):
-            promote_to = 'W_QU' if promotion == None else promotion
+            promote_to = 'W_QU' if promotion == None else 'W_' + promotion
             self._set_piece_state(promote_to, coord2, True)
             self._set_piece_state('W_PA', coord2, False)
         if (moved_piece == 'B_PA' and coord2[0] == 0):
-            promote_to = 'B_QU' if promotion == None else promotion
+            promote_to = 'B_QU' if promotion == None else 'B_' + promotion
             self._set_piece_state(promote_to, coord2, True)
             self._set_piece_state('B_PA', coord2, False)
     
-    def move_is_legal(self, coord1, coord2, mover_side):
+    def in_check(self, victim_side, c_king_coord=None):
         """
-        Checks if certain move is legal given the move and the side. This does not actually make the move
+        Checks if a side is in check
 
         Args:
-            coord1 (int array): coordinates of source
-            coord2 (int array): coordinates of destination
-            mover_side (int): Get all the possible moves for this side (Board.WHITE or Board.BLACK)
-
+            victim_side (int): side of the side to check whether the king is in check
+            king_coord (int list): location of custom king coordinate
+        
         Returns:
-            bool: True if the move is legal and false otherwise
+            bool: True if in check, False otherwise
         """
-        side = 'W' if mover_side == Board.WHITE else 'B'
-        opside = 'B' if mover_side == Board.WHITE else 'W'
 
-        # store old pieces
-        old_board_state = self.board_state.copy()
-
-        def unmove():
-            self.board_state = old_board_state
-
-        # make the move
-        self.make_move(coord1, coord2)
+        side = 'W' if victim_side == Board.WHITE else 'B'
+        opside = 'B' if victim_side == Board.WHITE else 'W'
 
         # find the king coordinates
 
@@ -205,15 +220,17 @@ class Board:
         
         king_coord = self._bitmapID2coord(left - 1)
 
+        if c_king_coord != None:
+            king_coord = c_king_coord
+
         # check for pawn check
         y_offset = 1 if side == 'W' else -1
 
         pa_mask = self._set_bitmap_state(0, [king_coord[0] + y_offset, king_coord[1] + 1], True)
         pa_mask = self._set_bitmap_state(pa_mask, [king_coord[0] + y_offset, king_coord[1] - 1], True)
 
-        if (self.board_state[f"{opside}_PA"]) & pa_mask: 
-            unmove()
-            return False
+        if (self.board_state[f"{opside}_PA"]) & pa_mask:   
+            return True
 
         # check for knight check
         kn_mask = 0
@@ -222,8 +239,7 @@ class Board:
             kn_mask = self._set_bitmap_state(kn_mask, [king_coord[0] + offset[0], king_coord[1] + offset[1]], True)
 
         if (self.board_state[f"{opside}_KN"]) & kn_mask: 
-            unmove()
-            return False
+            return True
 
         # check for king check
         ki_mask = 0
@@ -232,8 +248,7 @@ class Board:
             ki_mask = self._set_bitmap_state(ki_mask, [king_coord[0] + offset[0], king_coord[1] + offset[1]], True)
 
         if (self.board_state[f"{opside}_KI"]) & ki_mask: 
-            unmove()
-            return False
+            return True
 
         # Utility function for checking queens/rooks/bishops
         def check_qrb(offset_y, offset_x, fr, ho):
@@ -286,8 +301,7 @@ class Board:
             or (not check_qrb(0, -1, friendly, hostile)) \
             or (not check_qrb(1, 0, friendly, hostile)) \
             or (not check_qrb(-1, 0, friendly, hostile))):
-            unmove()
-            return False
+            return True
 
         #Check for queens/bishops
         friendly = 0
@@ -324,12 +338,70 @@ class Board:
         if ((not check_qrb(1, 1, friendly, hostile)) \
             or (not check_qrb(1, -1, friendly, hostile)) \
             or (not check_qrb(-1, 1, friendly, hostile)) \
-            or (not check_qrb(1, -1, friendly, hostile))):
-            unmove()
+            or (not check_qrb(-1, -1, friendly, hostile))):
+            return True
+
+        
+        return False
+
+    def move_is_legal(self, coord1, coord2, mover_side):
+        """
+        Checks if certain move is legal given the move and the side. This does not actually make the move
+
+        Args:
+            coord1 (int array): coordinates of source
+            coord2 (int array): coordinates of destination
+            mover_side (int): determine whether move is legal for this side (Board.WHITE or Board.BLACK)
+
+        Returns:
+            bool: True if the move is legal and false otherwise
+        """
+        side = 'W' if mover_side == Board.WHITE else 'B'
+        opside = 'B' if mover_side == Board.WHITE else 'W'
+
+        # store old pieces
+        old_board_state = self.board_state.copy()
+
+        # make the move
+        self.make_move(coord1, coord2)
+
+        if(self.in_check(mover_side)):
+            self.board_state = old_board_state
             return False
 
-        unmove()
+        self.board_state = old_board_state
         return True
+
+    def can_castle(self, side):
+        """
+        Checks if a side can castle on each side
+
+        Args:
+            side (int): Get whether this side can castle on left/right (Board.WHITE or Board.BLACK)
+        
+        Returns:
+            bool list: in structure [can castle queenside, can castle kingside]
+        """
+        sides = 'W' if side == Board.WHITE else 'B'
+        row = 0 if side == Board.WHITE else 7
+
+        if(self.in_check(side)):
+            return [False, False]
+
+        castles = [True, True]
+        
+        #Queenside
+        castles[0] = castles[0] and (self.get_piece_at([row, 1]) == None)
+        castles[0] = castles[0] and (self.get_piece_at([row, 2]) == None)
+        castles[0] = castles[0] and (self.get_piece_at([row, 3]) == None)
+        castles[0] = castles[0] and (not self.in_check(side, [row, 2]))
+
+        #Kingside
+        castles[1] = castles[1] and (self.get_piece_at([row, 5]) == None)
+        castles[1] = castles[1] and (self.get_piece_at([row, 6]) == None)
+        castles[1] = castles[1] and (not self.in_check(side, [row, 6]))
+
+        return castles
     
     def get_all_moves(self, side):
         """
@@ -352,10 +424,10 @@ class Board:
 
             if(x_shift >= 0):
                 res = (res << x_shift) & self.MASK64
-                res = res & (~Board_constants.LEFT_N_COL_MASK[x_shift])
+                res = res & (~self.bc.LEFT_N_COL_MASK[x_shift])
             else:
                 res = (res >> (-x_shift)) & self.MASK64
-                res = res & (Board_constants.LEFT_N_COL_MASK[8 + x_shift])
+                res = res & (self.bc.LEFT_N_COL_MASK[8 + x_shift])
             return res 
 
         #Finds least significant 1 bit position
@@ -439,7 +511,7 @@ class Board:
         #Move forward twice
         y_offset2 = 1 if side == Board.WHITE else -1
 
-        pa_moved_map2 = shift_board(self.board_state[f"{sides}_PA"] & (Board_constants.DEF_W_PA if side == Board.WHITE else Board_constants.DEF_B_PA), 0, y_offset2)
+        pa_moved_map2 = shift_board(self.board_state[f"{sides}_PA"] & (self.bc.DEF_W_PA if side == Board.WHITE else self.bc.DEF_B_PA), 0, y_offset2)
         pa_blockers2 = piece_maps['ALL'] & (~self.board_state[f"{sides}_PA"])
         pa_moved_map2 = pa_moved_map2 & (~pa_blockers2)
         pa_moved_map2 = shift_board(pa_moved_map2, 0, y_offset2) & (~pa_blockers2)
@@ -558,6 +630,18 @@ class Board:
             move_qrb(qu_coord, 1, -1, friendly, hostile)
             move_qrb(qu_coord, -1, -1, friendly, hostile)
 
+        #Castling
+        castles = self.can_castle(side)
+        castle_row = 0 if side == Board.WHITE else 7
+
+        if castles[0]:
+            start_coord = [castle_row, 4]
+            end_coord = [castle_row, 2]
+            move_list.append(move_to_board(start_coord, end_coord))
+        if castles[1]:
+            start_coord = [castle_row, 4]
+            end_coord = [castle_row, 6]
+            move_list.append(move_to_board(start_coord, end_coord))
         return move_list
 
     def print_board(self):
