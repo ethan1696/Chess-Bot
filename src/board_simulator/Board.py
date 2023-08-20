@@ -1,4 +1,6 @@
-from Board_constants import Board_constants
+import sys
+sys.path.append('.')
+from src.board_simulator.Board_constants import Board_constants
 
 class Board:
 
@@ -198,7 +200,7 @@ class Board:
         Args:
             victim_side (int): side of the side to check whether the king is in check
             king_coord (int list): location of custom king coordinate
-        
+
         Returns:
             bool: True if in check, False otherwise
         """
@@ -450,12 +452,37 @@ class Board:
         def move_to_board(coord1, coord2):
             # Make move
             old_board_state = self.board_state.copy()
+
+            piece1 = self.get_piece_at(coord1)
+            piece2 = self.get_piece_at(coord2)
+
+            val_dif = 0
+
+            if piece2 != None:
+                if piece1 in ('W_PA', 'B_PA') and piece2 in ('W_EN', 'B_EN'):
+                    val_dif = 1
+                else:
+                    val_dict = {
+                        'W_KN': 3, 
+                        'W_BI': 3, 
+                        'W_RO': 5, 
+                        'W_PA': 1, 
+                        'W_QU': 9,
+                        'W_EN': 0, 
+                        'B_KN': 3, 
+                        'B_BI': 3, 
+                        'B_RO': 5, 
+                        'B_PA': 1, 
+                        'B_QU': 9, 
+                        'B_EN': 0
+                    }
+                    val_dif = val_dict[piece2]
             self.make_move(coord1, coord2)
 
             c1 = coord1[:]
             c2 = coord2[:]
 
-            res = [[c1, c2], Board(self.board_state)]
+            res = [[c1, c2], Board(self.board_state), val_dif]
 
             # Unmake move
             self.board_state = old_board_state
@@ -490,7 +517,6 @@ class Board:
                         | self.board_state['B_QU']}
 
         #Pawn moves
-
         def update_pawns(moved_map, x_offset, y_offset):
             while (moved_map != 0):
                 pawn_id = find_lsb(moved_map)

@@ -1,12 +1,8 @@
-import sys
-sys.path.append("../board_simulator")
-sys.path.append("../engines")
-
 import requests
 import json
 import select
-from Board import Board
-import engine_v0 as engine
+from ..board_simulator.Board import Board
+import engines.engine_v0.engine_v0 as engine
 
 # bot API token
 with open('../../secrets/api_token.txt', 'r') as file:

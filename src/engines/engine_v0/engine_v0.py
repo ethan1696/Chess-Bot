@@ -1,8 +1,4 @@
-import sys
-sys.path.append("../board_simulator")
-sys.path.append("../engines")
-
-from Board import Board
+from ...board_simulator.Board import Board
 import random
 
 """
