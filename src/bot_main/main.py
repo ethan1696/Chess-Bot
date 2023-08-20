@@ -1,11 +1,13 @@
 import requests
 import json
 import select
-from ..board_simulator.Board import Board
-import engines.engine_v0.engine_v0 as engine
+import sys
+sys.path.append('.')
+from src.board_simulator.Board import Board
+import src.engines.engine_v1.engine_v1 as engine
 
 # bot API token
-with open('../../secrets/api_token.txt', 'r') as file:
+with open('secrets/api_token.txt', 'r') as file:
     BOT_API_TOKEN = file.readline().strip()
 
 BOT_NAME = "carlus_magnusen_9000"

@@ -2,10 +2,12 @@ import sys
 sys.path.append('.')
 from src.board_simulator.Board import Board
 import random
+import time
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 """
 This chess engine uses a probability predictor to walk the game tree to determine an optimal move
@@ -88,10 +90,20 @@ class Chess_CNN_m2(nn.Module):
         x = x.view(x.size(0), 8, 8)
         return x
 
+#Make GPU Instance
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")  # Use GPU
+    print("CUDA is available. Using GPU.")
+else:
+    device = torch.device("cpu")   # Use CPU
+    print("CUDA is not available. Using CPU.")
+
 #Load all models
 
 m1 = Chess_CNN_m1()
 m1.load_state_dict(torch.load("src/engines/engine_v1/model_training/models/m1_v9.pth"), strict=False)
+m1 = m1.to(device)
 
 m2_PA = Chess_CNN_m2()
 m2_KN = Chess_CNN_m2()
@@ -107,6 +119,13 @@ m2_RO.load_state_dict(torch.load("src/engines/engine_v1/model_training/models/m2
 m2_QU.load_state_dict(torch.load("src/engines/engine_v1/model_training/models/m2_QU_v1.pth"), strict=False)
 m2_KI.load_state_dict(torch.load("src/engines/engine_v1/model_training/models/m2_KI_v1.pth"), strict=False)
 
+m2_PA = m2_PA.to(device)
+m2_KN = m2_KN.to(device)
+m2_BI = m2_BI.to(device)
+m2_RO = m2_RO.to(device)
+m2_QU = m2_QU.to(device)
+m2_KI = m2_KI.to(device)
+
 m2_dict = {
     "PA" : m2_PA,
     "KN" : m2_KN,
@@ -120,6 +139,9 @@ m2_dict = {
 top_n = 3
 CM_val = 20
 SM_val = 0
+depth = 1
+
+
 def board2tensors_m1(board, side):
     pieces = ["PA", "KN", "BI", "RO", "QU", "KI"]
 
@@ -166,7 +188,7 @@ def transform_coord(coord, side):
 
 def get_expected_gain(board, side, depth):
     if depth == 0:
-        board.print_board()
+        #board.print_board()
         return 0
     op = None
     
@@ -185,15 +207,15 @@ def get_expected_gain(board, side, depth):
         else:
             return -SM_val
 
-    board_tensor = board2tensors_m1(board, side)
+    board_tensor = board2tensors_m1(board, side).to(device)
     with torch.no_grad():
         m1_probs = m1(board_tensor.unsqueeze(0)).squeeze(0)
     for move in move_list:
         coord1 = transform_coord(move[0][0], side)
         coord2 = transform_coord(move[0][1], side)
         piece1 = board.get_piece_at(move[0][0])[2:]
-        m1_tensor = coord2tensor(coord1)
-        m2_board = torch.cat((board_tensor, m1_tensor.unsqueeze(0)), dim=0)
+        m1_tensor = coord2tensor(coord1).to(device)
+        m2_board = torch.cat((board_tensor, m1_tensor.unsqueeze(0)), dim=0).to(device)
         with torch.no_grad():
             m2_probs = m2_dict[piece1](m2_board.unsqueeze(0)).squeeze(0)
         
@@ -213,8 +235,6 @@ def get_expected_gain(board, side, depth):
 
     return expected_gain
 
-print(get_expected_gain(Board(), 'W', 7))
-
 def get_move(board : Board, side):
     """
     Gets the next 'optimal' move based on board state
@@ -225,13 +245,26 @@ def get_move(board : Board, side):
     Returns:
         move (int list list): the 'optimal' move
     """
+    tic = time.time()
+    fr = 'W' if side == board.WHITE else 'B'
+    op = 'B' if side == board.BLACK else 'W'
+
     move_list = board.get_all_moves(side)
 
     print(f"ENGINE -- num moves available: {len(move_list)}")
 
-    index = 0
+    for move in move_list:
+        gain = move[2] - get_expected_gain(move[1], op, depth)
+        move.append(gain)
 
-    if(len(move_list) > 1):
-        index = random.randint(0, len(move_list) - 1)
+    best_gain = -1000
+    best_move = None
 
-    return move_list[index][0]
+    for move in move_list:
+        if move[3] > best_gain:
+            best_gain = move[3]
+            best_move = move[0]
+    toc = time.time()
+
+    print(f"ENGINE -- move generation time: {toc - tic}")
+    return best_move

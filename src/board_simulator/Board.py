@@ -476,6 +476,13 @@ class Board:
                         'B_QU': 9, 
                         'B_EN': 0
                     }
+
+                    if piece2 not in val_dict.keys():
+                        self.print_board()
+                        print(piece1, piece2)
+                        print(coord1, coord2)
+                        print(side)
+
                     val_dif = val_dict[piece2]
             self.make_move(coord1, coord2)
 
@@ -657,17 +664,17 @@ class Board:
             move_qrb(qu_coord, -1, -1, friendly, hostile)
 
         #Castling
-        castles = self.can_castle(side)
-        castle_row = 0 if side == Board.WHITE else 7
+        # castles = self.can_castle(side)
+        # castle_row = 0 if side == Board.WHITE else 7
 
-        if castles[0]:
-            start_coord = [castle_row, 4]
-            end_coord = [castle_row, 2]
-            move_list.append(move_to_board(start_coord, end_coord))
-        if castles[1]:
-            start_coord = [castle_row, 4]
-            end_coord = [castle_row, 6]
-            move_list.append(move_to_board(start_coord, end_coord))
+        # if castles[0]:
+        #     start_coord = [castle_row, 4]
+        #     end_coord = [castle_row, 2]
+        #     move_list.append(move_to_board(start_coord, end_coord))
+        # if castles[1]:
+        #     start_coord = [castle_row, 4]
+        #     end_coord = [castle_row, 6]
+        #     move_list.append(move_to_board(start_coord, end_coord))
         return move_list
 
     def print_board(self):
